@@ -8,26 +8,65 @@ nameOverride: aws-node
 
 init:
   image:
-    tag: v1.12.1
+    tag: v1.23.3
+    domain: amazonaws.com
     region: us-west-2
-    account: "602401143452"   
-    pullPolicy: Always
-    domain: "amazonaws.com"  
+    endpoint: ecr
+    account: "602401143452"
+    pullPolicy: IfNotPresent
     # Set to use custom image
+    overrideRepository:
+    # overrideRepository: "repo/org/image"
+    override:
     # override: "repo/org/image:tag"
   env:
     DISABLE_TCP_EARLY_DEMUX: "false"
     ENABLE_IPv6: "false"
   securityContext:
     privileged: true
+  resources: {}
+
+nodeAgent:
+  enabled: true
+  image:
+    tag: v1.5.0
+    domain: amazonaws.com
+    region: us-west-2
+    endpoint: ecr
+    account: "602401143452"
+    pullPolicy: IfNotPresent
+    # Set to use custom image
+    overrideRepository:
+    # overrideRepository: "repo/org/image"
+    override:
+    # override: "repo/org/image:tag"
+  securityContext:
+    capabilities:
+      add:
+      - "NET_ADMIN"
+    privileged: true
+  enableCloudWatchLogs: "false"
+  enablePolicyEventLogs: "false"
+  networkPolicyAgentLogFileLocation: "/var/log/aws-routed-eni/network-policy-agent.log"
+  enableIpv6: "false"
+  metricsBindAddr: "8162"
+  healthProbeBindAddr: "8163"
+  conntrackCacheCleanupPeriod: 300
+  conntrackCacheTableSize: 524288
+  logLevel: "debug"
+  resources: {}
 
 image:
+  tag: v1.23.3
+  domain: amazonaws.com
   region: us-west-2
-  tag: v1.12.1
-  account: "602401143452"   
-  domain: "amazonaws.com"  
-  pullPolicy: Always
+  endpoint: ecr
+  account: "602401143452"
+  pullPolicy: IfNotPresent
   # Set to use custom image
+  overrideRepository:
+  # overrideRepository: "repo/org/image"
+  override:
   # override: "repo/org/image:tag"
 
 # The CNI supports a number of environment variable settings
@@ -53,10 +92,47 @@ env:
   DISABLE_NETWORK_RESOURCE_PROVISIONING: "false"
   ENABLE_IPv4: "true"
   ENABLE_IPv6: "false"
+  ENABLE_SUBNET_DISCOVERY: "true"
+  VPC_CNI_VERSION: "v1.23.3"
+  NETWORK_POLICY_ENFORCING_MODE: "standard"
+  ENABLE_IMDS_ONLY_MODE: "false"
+  ENABLE_MULTI_NIC: "false"
+
+# Add env from configMap or from secrets
+# - name: ENV_VAR1
+#   valueFrom:
+#     configMapKeyRef:
+#       name: example-config
+#       key: ENV_VAR1
+# - name: ENV_VAR2
+#   valueFrom:
+#     configMapKeyRef:
+#       name: example-config
+#       key: ENV_VAR2
+# - name: SECRET_VAR1
+#   valueFrom:
+#     secretKeyRef:
+#       name: example-secret
+#       key: SECRET_VAR1
+extraEnv: []
+
 
 # this flag enables you to use the match label that was present in the original daemonset deployed by EKS
 # You can then annotate and label the original aws-node resources and 'adopt' them into a helm release
 originalMatchLabels: false
+
+# Settings for aws-vpc-cni ConfigMap
+# - Network Policy settings
+enableNetworkPolicy: "false"
+# - Windows settings
+enableWindowsIpam: "false"
+# - Windows Prefix Delegation settings
+enableWindowsPrefixDelegation: "false"
+warmWindowsPrefixTarget: 0
+warmWindowsIPTarget: 1
+minimumWindowsIPTarget: 3
+# - Security Groups for Pods settings
+branchENICooldown: 60
 
 cniConfig:
   enabled: false
@@ -93,7 +169,7 @@ livenessProbe:
   exec:
     command:
       - /app/grpc-health-probe
-      - '-addr=:50051'
+      - '-addr=unix:///var/run/aws-node/ipamd.sock'
       - '-connect-timeout=5s'
       - '-rpc-timeout=5s'
   initialDelaySeconds: 60
@@ -104,7 +180,7 @@ readinessProbe:
   exec:
     command:
       - /app/grpc-health-probe
-      - '-addr=:50051'
+      - '-addr=unix:///var/run/aws-node/ipamd.sock'
       - '-connect-timeout=5s'
       - '-rpc-timeout=5s'
   initialDelaySeconds: 1
@@ -120,9 +196,13 @@ updateStrategy:
   rollingUpdate:
     maxUnavailable: "10%"
 
+# Minimum seconds a newly created pod should be ready before it is treated as available
+minReadySeconds:
+
 nodeSelector: {}
 
-tolerations: []
+tolerations:
+  - operator: Exists
 
 affinity:
   nodeAffinity:
@@ -142,6 +222,8 @@ affinity:
               operator: NotIn
               values:
                 - fargate
+                - hybrid
+                - auto
 
 eniConfig:
   # Specifies whether ENIConfigs should be created
@@ -162,3 +244,17 @@ eniConfig:
     #   id: subnet-789
     #   securityGroups:
     #   - sg-789
+
+podMonitor:
+  # Create Prometheus podMonitor 
+  create: false
+  # Annotations to add to the Prometheus podMonitor
+  annotations: {}
+  # Labels to add to the Prometheus podMonitor
+  labels: {}
+  # The interval to scrape metrics.
+  interval: 30s
+  # The timeout before a metrics scrape fails.
+  scrapeTimeout: 30s
+  # relabelings to apply to the podMonitor
+  relabelings: []

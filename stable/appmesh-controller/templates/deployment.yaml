@@ -82,6 +82,8 @@ spec:
         - --sds-uds-path={{ .Values.sds.udsPath }}
         - --enable-backend-groups={{ .Values.enableBackendGroups }}
         - --cluster-name={{ .Values.clusterName}}
+        - --use-aws-dual-stack-endpoint={{ .Values.useAwsDualStackEndpoint}}
+        - --use-aws-fips-endpoint={{ .Values.useAwsFIPSEndpoint}}
         {{- if .Values.cloudMapCustomHealthCheck.enabled }}
         - --enable-custom-health-check=true
         {{- end }}
@@ -122,6 +124,9 @@ spec:
         # this must be same as livenessProbe port which can be configured 
         - --health-probe-port={{ .Values.livenessProbe.httpGet.port }}
         - --wait-until-proxy-ready={{ .Values.sidecar.waitUntilProxyReady }}
+        # TLS configuration
+        - --tls-min-version={{ .Values.tlsMinVersion }}
+        - --tls-cipher-suite={{ .Values.tlsCipherSuite }}
         {{- if .Values.env }}
         env:
           {{- range $key, $value := .Values.env }}
